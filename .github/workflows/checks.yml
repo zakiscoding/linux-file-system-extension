@@ -1,0 +1,23 @@
+name: Image tool checks
+on: [push, pull_request]
+jobs:
+  image-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check shell syntax
+        run: |
+          for script in scripts/*.sh guest/init; do
+            bash -n "$script"
+          done
+      - name: Compile and test offline tool
+        run: make test
+      - name: Compile with address and undefined behavior sanitizers
+        run: |
+          cc -std=c11 -Wall -Wextra -Werror -pedantic -g -O1 \
+            -fsanitize=address,undefined -fno-omit-frame-pointer \
+            -Iinclude tools/edufs.c -o build/edufs-sanitized
+      - name: Run sanitized image tests
+        env:
+          EDUFS_TOOL: ${{ github.workspace }}/build/edufs-sanitized
+        run: python3 tests/test_images.py

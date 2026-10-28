@@ -1,0 +1,41 @@
+#!/bin/sh
+export PATH=/bin:/sbin
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev
+fail() {
+    echo "EDUFS SMOKE FAIL: $*"
+    exec sh
+}
+insmod /modules/edufs.ko || fail insmod
+grep -qw edufs /proc/filesystems || fail registration
+mount -t edufs /dev/vda /mnt || fail mount
+ls -la /mnt || fail listing
+umount /mnt || fail unmount
+rmmod edufs || fail unload
+insmod /modules/edufs.ko || fail reload
+mount -t edufs /dev/vda /mnt || fail remount
+if grep -qw edufs.test=1 /proc/cmdline; then
+    mkdir /bad
+    if mount -t edufs -o ro /dev/vdb /bad; then
+        echo 'EDUFS AUTOMATED FAIL: accepted bad superblock'
+        poweroff -f
+    fi
+    if mount -t edufs -o ro /dev/vdc /bad; then
+        echo 'EDUFS AUTOMATED FAIL: accepted invalid block pointer'
+        poweroff -f
+    fi
+    echo 'PASS: malformed superblock and invalid block reference rejected at mount'
+    if /bin/guest-tests; then
+        umount /mnt || fail final-unmount
+        echo 'EDUFS AUTOMATED PASS'
+    else
+        echo 'EDUFS AUTOMATED FAIL'
+    fi
+    poweroff -f
+fi
+umount /mnt || fail second-unmount
+rmmod edufs || fail second-unload
+echo 'EDUFS SMOKE PASS: registration, mount, list, unmount, reload'
+echo 'Use poweroff -f to exit; QEMU escape: Ctrl-a x.'
+exec sh
